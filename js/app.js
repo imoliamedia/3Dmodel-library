@@ -7,6 +7,11 @@ import { ThumbQueue, THUMB_VERSION } from './thumbs.js';
 import { Viewer } from './viewer.js';
 import { exportBackup, importBackup, lastBackup } from './backup.js';
 import { findDuplicates, pickKeeper, mergeInto } from './dupes.js';
+import {
+  diskSupported, loadRoot, pickRoot, unlinkRoot, ensureWrite, syncEnabled, setSyncEnabled, rootName, hasRoot,
+  moveFile, deleteFile, safeName, scan,
+} from './disk.js';
+import { isModelFile } from './loaders.js';
 
 const $ = (id) => document.getElementById(id);
 const DAY = 86_400_000;
@@ -244,7 +249,9 @@ async function applyBulk(clearFolder = false) {
   if (!clearFolder && !raw) return;
   const ids = [...state.selected];
   const existing = folderNames();
+  const onDisk = bulkMode === 'folder' && syncEnabled() && (await ensureWrite());
   let count = 0;
+  let moved = 0;
   for (const id of ids) {
     const m = byId(id);
     if (!m) continue;
@@ -256,12 +263,17 @@ async function applyBulk(clearFolder = false) {
     } else {
       next = { ...m, tags: [...new Set([...m.tags, ...parseTags(raw)])] };
     }
+    if (onDisk && m.path) {
+      const synced = await syncToDisk(m, next);
+      if (synced.path !== next.path) moved++;
+      next = synced;
+    }
     await updateModel(next);
     state.models[state.models.findIndex((x) => x.id === id)] = next;
     count++;
   }
   $('bulk-dialog').close();
-  toast(t(bulkMode === 'folder' ? 'bulk.moved' : 'bulk.tagged', { n: count }));
+  toast(t(bulkMode === 'folder' ? 'bulk.moved' : 'bulk.tagged', { n: count }) + (moved ? ` · ${t('disk.moved', { n: moved })}` : ''), 5000);
   clearSelection();
   render();
 }
@@ -375,11 +387,19 @@ async function saveCurrent({ quiet = false } = {}) {
     tags: parseTags(fields.tags().value),
     note: fields.note().value,
   };
-  await updateModel(next);
-  state.models[state.models.findIndex((x) => x.id === m.id)] = next;
+  const synced = await syncToDisk(m, next);
+  await updateModel(synced);
+  state.models[state.models.findIndex((x) => x.id === m.id)] = synced;
   render();
   renderSuggestions();
+  showDiskPath(synced);
   if (!quiet) toast(t('detail.saved'), 1500);
+}
+
+function showDiskPath(m) {
+  $('d-disk').hidden = !m.path;
+  if (m.path) $('d-disk').textContent = t('disk.path', { path: m.path.join('/') });
+  if (m.path) $('d-file').textContent = m.name;
 }
 
 function renderSuggestions() {
@@ -412,6 +432,7 @@ async function loadCurrent() {
   fields.tags().value = m.tags.join(', ');
   fields.note().value = m.note;
   $('d-file').textContent = m.name;
+  showDiskPath(m);
   $('d-dims').textContent = formatDims(m.dims);
   $('d-size').textContent = formatBytes(m.size);
   $('d-added').textContent = new Date(m.added).toLocaleDateString(getLang());
@@ -484,9 +505,7 @@ async function toggleFav() {
 async function deleteCurrent() {
   const m = currentMeta();
   if (!m || !confirm(t('detail.confirmdelete', { name: displayTitle(m) }))) return;
-  await deleteModel(m.id);
-  dropThumbUrl(m.id);
-  state.models = state.models.filter((x) => x.id !== m.id);
+  await removeModels([m.id]);
   state.viewerIds.splice(state.viewerIndex, 1);
   render();
   if (!state.viewerIds.length) return closeViewer();
@@ -506,11 +525,130 @@ async function downloadCurrent() {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
+/* ---------- disk link (optional, Chrome/Edge on desktop) ---------- */
+
+const diskMessage = (err, m) => (err?.name === 'NotFoundError'
+  ? t('disk.missing', { name: m?.name ?? '' })
+  : t('disk.error', { msg: err?.message || err?.name || String(err) }));
+
+/**
+ * Apply a rename (new title) and/or a move (new folder) to the file on disk.
+ * Returns the updated model; on any problem the model is returned unchanged and a message shown.
+ */
+async function syncToDisk(m, next) {
+  if (!syncEnabled() || !m.path) return next;
+  const folderChanged = (m.folder || '') !== (next.folder || '');
+  const titleChanged = next.title && m.title !== next.title && safeName(next.title);
+  if (!folderChanged && !titleChanged) return next;
+  if (m.ext === 'obj' && m.mtl) { toast(t('disk.skipobj'), 6000); return next; }
+  try {
+    const destFolder = folderChanged ? (next.folder ? [safeName(next.folder)] : []) : m.path.slice(0, -1);
+    const newName = titleChanged ? `${safeName(next.title)}.${m.ext}` : undefined;
+    const path = await moveFile(m.path, destFolder, newName);
+    if (titleChanged) toast(t('disk.renamed', { name: path.at(-1) }), 5000);
+    return { ...next, path, name: path.at(-1) };
+  } catch (err) {
+    console.warn('Disk action failed', err);
+    toast(diskMessage(err, m), 6000);
+    return next;
+  }
+}
+
+/** Ask whether the files should also be removed from the disk. Cancel keeps them there. */
+async function deleteFromDisk(ids) {
+  if (!syncEnabled()) return;
+  const linked = ids.map(byId).filter((m) => m?.path);
+  if (!linked.length) return;
+  if (!(await ensureWrite())) return toast(t('disk.nopermission'));
+  if (!confirm(t('disk.confirm.delete', { n: linked.length }))) return;
+  let n = 0;
+  for (const m of linked) {
+    try { await deleteFile(m.path); n++; } catch (err) { toast(diskMessage(err, m), 6000); }
+  }
+  if (n) toast(t('disk.deleted', { n }));
+}
+
+function renderDisk() {
+  const supported = diskSupported();
+  $('disk-unsupported').hidden = supported;
+  $('disk-section').hidden = !supported;
+  if (!supported) return;
+  const linked = state.models.filter((m) => m.path).length;
+  $('disk-status').textContent = hasRoot()
+    ? t('disk.status', { name: rootName(), linked, total: state.models.length })
+    : t('disk.none');
+  $('disk-link').textContent = t(hasRoot() ? 'disk.relink' : 'disk.link');
+  $('disk-rescan').hidden = $('disk-unlink').hidden = $('disk-sync-row').hidden = !hasRoot();
+  $('disk-sync').checked = syncEnabled();
+}
+
+async function linkFolder({ pick }) {
+  if (pick) {
+    try {
+      await pickRoot();
+      // a different folder: old paths no longer point anywhere
+      state.models = state.models.map((m) => (m.path ? { ...m, path: undefined } : m));
+      await Promise.all(state.models.map((m) => updateModel(m)));
+    } catch (err) {
+      if (err.name === 'AbortError') return toast(t('disk.cancelled'));
+      throw err;
+    }
+  }
+  if (!(await ensureWrite())) return toast(t('disk.nopermission'));
+
+  $('progress').hidden = false;
+  const found = await scan((n) => { $('progress-text').textContent = t('disk.scanning', { n }); });
+  const keyOf = (name, size, modified) => `${name}|${size}|${modified}`;
+  const known = new Map(state.models.map((m) => [keyOf(m.name, m.size, m.lastModified), m]));
+
+  let linked = 0;
+  const fresh = [];
+  for (const { file, path } of found) {
+    const match = isModelFile(file.name) ? known.get(keyOf(file.name, file.size, file.lastModified)) : null;
+    if (match) {
+      const next = { ...match, path, folder: match.folder || (path.length > 1 ? path[0] : '') };
+      await updateModel(next);
+      state.models[state.models.findIndex((m) => m.id === match.id)] = next;
+      linked++;
+    } else {
+      fresh.push(Object.assign(file, { _path: path }));
+    }
+  }
+  const res = await importFiles(fresh, state.models, (done, total) => {
+    $('progress-fill').style.width = `${(done / total) * 100}%`;
+    $('progress-text').textContent = t('import.progress', { done, total });
+  });
+  $('progress').hidden = true;
+  state.models.push(...res.added);
+  render();
+  queueMissingThumbs();
+  toast(t('disk.linked', { linked, added: res.added.length }), 6000);
+  renderDisk();
+}
+
+async function toggleDiskSync(on) {
+  if (on && !(await ensureWrite())) {
+    $('disk-sync').checked = false;
+    return toast(t('disk.nopermission'));
+  }
+  setSyncEnabled(on);
+  if (on) toast(t('disk.on'), 5000);
+}
+
+async function unlinkFolder() {
+  await unlinkRoot();
+  state.models = state.models.map((m) => (m.path ? { ...m, path: undefined } : m));
+  await Promise.all(state.models.map((m) => updateModel(m)));
+  render();
+  renderDisk();
+}
+
 /* ---------- duplicates ---------- */
 
 let dupeGroups = [];
 
-async function removeModels(ids) {
+async function removeModels(ids, { disk = true } = {}) {
+  if (disk) await deleteFromDisk(ids);
   for (const id of ids) {
     await deleteModel(id);
     dropThumbUrl(id);
@@ -589,11 +727,11 @@ function renderDupes() {
   }));
 }
 
-async function mergeAndRemove(keeper, others) {
+async function mergeAndRemove(keeper, others, opts) {
   const merged = mergeInto(keeper, others);
   await updateModel(merged);
   state.models[state.models.findIndex((m) => m.id === merged.id)] = merged;
-  await removeModels(others.map((o) => o.id));
+  await removeModels(others.map((o) => o.id), opts);
   dupeGroups = dupeGroups.map((g) => g.map((m) => (m.id === merged.id ? merged : m)));
   render();
 }
@@ -601,9 +739,11 @@ async function mergeAndRemove(keeper, others) {
 async function cleanAllDupes() {
   const extra = dupeGroups.reduce((n, g) => n + g.length - 1, 0);
   if (!extra || !confirm(t('dupes.confirm', { extra }))) return;
+  const removing = dupeGroups.flatMap((g) => { const k = pickKeeper(g); return g.filter((m) => m.id !== k.id).map((m) => m.id); });
+  await deleteFromDisk(removing);
   for (const group of dupeGroups) {
     const keeper = pickKeeper(group);
-    await mergeAndRemove(keeper, group.filter((m) => m.id !== keeper.id));
+    await mergeAndRemove(keeper, group.filter((m) => m.id !== keeper.id), { disk: false });
   }
   toast(t('dupes.done', { n: extra }));
   renderDupes();
@@ -624,6 +764,7 @@ async function openSettings() {
     quota: formatBytes(info.quota),
     persist: info.persisted ? t('settings.storage.persist') : t('settings.storage.nopersist'),
   });
+  renderDisk();
   $('settings-dialog').showModal();
 }
 
@@ -734,6 +875,10 @@ function wire() {
     applyTheme(e.target.value);
   });
   $('set-rebuild').addEventListener('click', rebuildThumbs);
+  $('disk-link').addEventListener('click', () => linkFolder({ pick: true }).catch((e) => toast(diskMessage(e))));
+  $('disk-rescan').addEventListener('click', () => linkFolder({ pick: false }).catch((e) => toast(diskMessage(e))));
+  $('disk-unlink').addEventListener('click', unlinkFolder);
+  $('disk-sync').addEventListener('change', (e) => toggleDiskSync(e.target.checked));
   $('set-export-full').addEventListener('click', () => doExport(true));
   $('set-export-meta').addEventListener('click', () => doExport(false));
   $('set-import').addEventListener('click', () => $('import-input').click());
@@ -771,6 +916,7 @@ async function init() {
   }, { rootMargin: '200px' });
 
   wire();
+  await loadRoot();
   state.models = await getAllModels();
   render();
   queueMissingThumbs();

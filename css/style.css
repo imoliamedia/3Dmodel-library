@@ -215,3 +215,6 @@ body.has-sel main { padding-bottom: 96px; }
 body.has-sel .site-footer { padding-bottom: 96px; }
 
 body.has-sel .toast { bottom: calc(90px + var(--safe-b)); }
+
+.check { display: flex; align-items: flex-start; gap: 10px; font-size: .95rem; padding: 6px 0; cursor: pointer; }
+.check input { width: 22px; height: 22px; margin: 0; flex: none; accent-color: var(--accent); }

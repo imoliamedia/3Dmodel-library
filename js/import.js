@@ -52,7 +52,8 @@ export async function importFiles(files, existing, onProgress) {
         result.dupes++;
       }
     } else {
-      const folder = folderOf(file);
+      // files that come from the linked disk folder: the first sub folder becomes the app folder
+      const folder = file._path ? '' : folderOf(file);
       const meta = {
         id: crypto.randomUUID(),
         name: file.name,
@@ -60,6 +61,7 @@ export async function importFiles(files, existing, onProgress) {
         size: file.size,
         lastModified: file.lastModified,
         title: '',
+        folder: file._path?.length > 1 ? file._path[0] : '',
         tags: folder ? [folder] : [],
         note: '',
         fav: false,
@@ -68,6 +70,7 @@ export async function importFiles(files, existing, onProgress) {
         hasThumb: false,
         thumbFailed: false,
         ...(mtl ? { mtl } : {}),
+        ...(file._path ? { path: file._path } : {}),
       };
       await addModel(meta, file);
       known.set(key, meta);

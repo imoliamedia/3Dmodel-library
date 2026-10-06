@@ -102,6 +102,7 @@
         <input id="d-title" type="text" autocomplete="off">
       </label>
       <p class="filename" id="d-file"></p>
+      <p class="filename" id="d-disk" hidden></p>
       <label class="field">
         <span data-i18n="detail.folder">Map</span>
         <input id="d-folder" type="text" list="folder-list" autocomplete="off">
@@ -164,6 +165,7 @@
       <li data-i18n-html="help.step.tidy"><b>Selecteren:</b> vink modellen aan (rechtsboven) om ze samen naar een map te verplaatsen, te taggen of te verwijderen.</li>
       <li data-i18n-html="help.step.dupes"><b>Dubbelen:</b> vind identieke bestanden onder verschillende namen en ruim ze op.</li>
       <li data-i18n-html="help.step.colours"><b>Kleuren:</b> 3MF-kleuren van Bambu Studio, OrcaSlicer en PrusaSlicer worden getoond. Bij OBJ kies je het .mtl-bestand samen met de .obj.</li>
+      <li data-i18n-html="help.step.disk"><b>Schijf (optioneel):</b> in Chrome of Edge op pc kun je een map koppelen, zodat hernoemen en verplaatsen ook echt op schijf gebeurt. Staat standaard uit.</li>
       <li data-i18n-html="help.step.backup"><b>Back-up:</b> je bibliotheek staat enkel in deze browser. Maak af en toe een back-up via Instellingen, ook om van toestel te wisselen.</li>
       <li data-i18n-html="help.step.install"><b>Installeren:</b> kies "Toevoegen aan beginscherm" (iPhone/iPad via Delen, Android via het menu) om het als app te gebruiken, ook offline.</li>
     </ol>
@@ -201,6 +203,20 @@
       </select>
     </label>
     <button id="set-rebuild" class="btn block" data-i18n="settings.rebuild">Previews opnieuw maken</button>
+    <h3 data-i18n="disk.title">Schijf (Chrome/Edge op pc)</h3>
+    <p id="disk-unsupported" class="hint" data-i18n="disk.unsupported" hidden>Niet beschikbaar in deze browser. Het koppelen van een map werkt alleen in Chrome of Edge op een computer.</p>
+    <div id="disk-section" hidden>
+      <p class="hint" data-i18n="disk.hint">Koppel een map op je pc. Dan kan de app bestanden ook echt op schijf hernoemen en verplaatsen als je dat hier aanzet. Standaard gebeurt alles enkel in de app.</p>
+      <p id="disk-status" class="hint"></p>
+      <button id="disk-link" class="btn block" data-i18n="disk.link">Map koppelen</button>
+      <button id="disk-rescan" class="btn block" data-i18n="disk.rescan" hidden>Opnieuw scannen</button>
+      <button id="disk-unlink" class="btn block" data-i18n="disk.unlink" hidden>Ontkoppelen</button>
+      <label class="check" id="disk-sync-row" hidden>
+        <input type="checkbox" id="disk-sync">
+        <span data-i18n="disk.sync">Wijzigingen ook op schijf uitvoeren</span>
+      </label>
+      <p class="hint" data-i18n="disk.syncinfo">Aan: een nieuwe naam hernoemt het bestand, een map kiezen verplaatst het naar die map en verwijderen kan het bestand ook van je schijf halen (altijd met een extra vraag, niet ongedaan te maken).</p>
+    </div>
     <h3 data-i18n="settings.backup">Back-up</h3>
     <p class="hint" data-i18n="settings.backup.hint">Je bibliotheek staat enkel in deze browser. Maak regelmatig een back-up, ook om van toestel te wisselen.</p>
     <button id="set-export-full" class="btn block" data-i18n="settings.export.full">Exporteer alles (catalogus + bestanden)</button>

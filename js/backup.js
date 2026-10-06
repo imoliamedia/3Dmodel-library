@@ -21,7 +21,10 @@ const stamp = () => new Date().toISOString().slice(0, 10);
  */
 export async function exportBackup({ files }) {
   const models = await getAllModels();
-  const catalog = { format: FORMAT, version: VERSION, exported: Date.now(), includesFiles: files, models };
+  const catalog = {
+    format: FORMAT, version: VERSION, exported: Date.now(), includesFiles: files,
+    models: models.map(({ path, ...rest }) => rest), // disk paths only mean something on this computer
+  };
   const zipEntries = { 'catalog.json': strToU8(JSON.stringify(catalog)) };
 
   if (files) {
@@ -63,7 +66,7 @@ export async function importBackup(file) {
       }
     } else if (data) {
       // thumbnails are regenerated after import
-      await addModel({ ...meta, hasThumb: false, thumbFailed: false }, new Blob([data]));
+      await addModel({ ...meta, path: undefined, hasThumb: false, thumbFailed: false }, new Blob([data]));
       added++;
     } else {
       skipped++; // metadata without a file and nothing to attach it to
