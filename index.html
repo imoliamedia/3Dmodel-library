@@ -6,8 +6,12 @@
   <title>Model Library</title>
   <meta name="description" content="Local 3D model library for STL, 3MF and OBJ. Nothing leaves your device.">
   <meta name="theme-color" content="#14161a">
+  <meta name="author" content="Werkplaats Marc">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Models">
   <link rel="stylesheet" href="css/style.css">
   <script type="importmap">
   {
@@ -23,6 +27,7 @@
     <h1 class="brand"><span class="logo" aria-hidden="true"></span><span data-i18n="app.title">Model Library</span></h1>
     <input id="search" type="search" class="search" data-i18n-placeholder="search.placeholder" autocomplete="off">
     <button id="btn-add" class="btn primary" data-i18n="add.button">Toevoegen</button>
+    <button id="btn-help" class="btn icon" data-i18n-aria-label="help.title" aria-label="Uitleg">?</button>
     <button id="btn-settings" class="btn icon" data-i18n-aria-label="settings.title" aria-label="Instellingen">&#9881;</button>
   </header>
 
@@ -39,6 +44,7 @@
       <option value="size" data-i18n="sort.size">Bestandsgrootte</option>
     </select>
     <button id="btn-cleanup" class="btn" data-i18n="cleanup.button">Opruimen</button>
+    <button id="btn-dupes" class="btn" data-i18n="dupes.button">Dubbelen zoeken</button>
   </div>
 
   <div id="progress" class="progress" hidden>
@@ -59,6 +65,10 @@
     </section>
     <div id="grid" class="grid"></div>
   </main>
+
+  <footer class="site-footer">
+    <span data-i18n-html="footer.madeby">Een gratis tool van <a href="https://www.werkplaatsmarc.be" target="_blank" rel="noopener">Werkplaats Marc</a></span>
+  </footer>
 
   <!-- Add menu -->
   <dialog id="add-dialog" class="dialog">
@@ -118,6 +128,35 @@
       <p class="hint" data-i18n="detail.deletehint">Verwijderen haalt het model enkel uit deze bibliotheek, niet van je schijf.</p>
     </aside>
   </div>
+
+  <!-- Help -->
+  <dialog id="help-dialog" class="dialog wide">
+    <h2 data-i18n="help.title">Hoe werkt het?</h2>
+    <p data-i18n="help.intro">Een gratis bibliotheek voor je 3D-printbestanden (STL, 3MF, OBJ). Alles blijft op dit toestel: er wordt niets geüpload en je originele bestanden blijven ongewijzigd.</p>
+    <ol class="help-list">
+      <li data-i18n-html="help.step.add"><b>Toevoegen:</b> tik op Toevoegen en kies bestanden of een hele map, of sleep ze in het venster.</li>
+      <li data-i18n-html="help.step.view"><b>Bekijken:</b> tik op een model om het te draaien en te zoomen. De afmetingen staan eronder.</li>
+      <li data-i18n-html="help.step.name"><b>Benoemen:</b> geef elk model een eigen naam, tags en een notitie. Zo weet je later weer wat wat is.</li>
+      <li data-i18n-html="help.step.tidy"><b>Opruimen:</b> de knop Opruimen loopt door je naamloze modellen. Enter bewaart en gaat naar het volgende.</li>
+      <li data-i18n-html="help.step.dupes"><b>Dubbelen:</b> vind identieke bestanden onder verschillende namen en ruim ze op.</li>
+      <li data-i18n-html="help.step.colours"><b>Kleuren:</b> 3MF-kleuren van Bambu Studio, OrcaSlicer en PrusaSlicer worden getoond. Bij OBJ kies je het .mtl-bestand samen met de .obj.</li>
+      <li data-i18n-html="help.step.backup"><b>Back-up:</b> je bibliotheek staat enkel in deze browser. Maak af en toe een back-up via Instellingen, ook om van toestel te wisselen.</li>
+      <li data-i18n-html="help.step.install"><b>Installeren:</b> kies "Toevoegen aan beginscherm" (iPhone/iPad via Delen, Android via het menu) om het als app te gebruiken, ook offline.</li>
+    </ol>
+    <p class="hint" data-i18n-html="help.credit">Gemaakt door <a href="https://www.werkplaatsmarc.be" target="_blank" rel="noopener">Werkplaats Marc</a>.</p>
+    <p class="hint"><a href="https://github.com/imoliamedia/3Dmodel-library" target="_blank" rel="noopener" data-i18n="help.source">Open source op GitHub (MIT)</a></p>
+    <button class="btn block ghost" id="help-close" data-i18n="common.close">Sluiten</button>
+  </dialog>
+
+  <!-- Duplicates -->
+  <dialog id="dupes-dialog" class="dialog wide">
+    <h2 data-i18n="dupes.title">Dubbele bestanden</h2>
+    <p id="dupes-status" class="hint"></p>
+    <div id="dupes-list" class="dupes-list"></div>
+    <button id="dupes-clean" class="btn primary block" data-i18n="dupes.clean" hidden>Verwijder alle dubbelen</button>
+    <p class="hint" data-i18n="dupes.hint">Enkel bestanden die byte voor byte identiek zijn. Van elke groep blijft de kopie met de meeste gegevens staan; namen en tags van de andere worden meegenomen.</p>
+    <button class="btn block ghost" id="dupes-close" data-i18n="common.close">Sluiten</button>
+  </dialog>
 
   <!-- Settings -->
   <dialog id="settings-dialog" class="dialog">

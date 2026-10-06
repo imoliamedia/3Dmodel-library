@@ -4,7 +4,7 @@ import { getFile, putThumb, updateModel } from './db.js';
 
 const SIZE = 360;
 /** Bump when previews should be regenerated for everyone (new colours, new renderer...). */
-export const THUMB_VERSION = 2;
+export const THUMB_VERSION = 3;
 let renderer, scene, camera;
 
 function init() {

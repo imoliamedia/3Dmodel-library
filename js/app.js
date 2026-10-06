@@ -6,6 +6,7 @@ import { importFiles, filesFromDrop } from './import.js';
 import { ThumbQueue, THUMB_VERSION } from './thumbs.js';
 import { Viewer } from './viewer.js';
 import { exportBackup, importBackup, lastBackup } from './backup.js';
+import { findDuplicates, pickKeeper, mergeInto } from './dupes.js';
 
 const $ = (id) => document.getElementById(id);
 const DAY = 86_400_000;
@@ -372,6 +373,109 @@ function startCleanup() {
   openViewer(ids[0], ids, true);
 }
 
+/* ---------- duplicates ---------- */
+
+let dupeGroups = [];
+
+async function removeModels(ids) {
+  for (const id of ids) {
+    await deleteModel(id);
+    dropThumbUrl(id);
+  }
+  state.models = state.models.filter((m) => !ids.includes(m.id));
+}
+
+async function openDupes() {
+  const dialog = $('dupes-dialog');
+  $('dupes-list').replaceChildren();
+  $('dupes-clean').hidden = true;
+  $('dupes-status').textContent = t('dupes.scanning', { done: 0, total: 0 });
+  dialog.showModal();
+  const res = await findDuplicates(state.models, (done, total) => {
+    $('dupes-status').textContent = t('dupes.scanning', { done, total });
+  });
+  state.models = res.models;
+  dupeGroups = res.groups;
+  renderDupes();
+}
+
+function renderDupes() {
+  // drop models removed meanwhile, then groups that are no longer duplicates
+  dupeGroups = dupeGroups
+    .map((g) => g.filter((m) => state.models.some((x) => x.id === m.id)))
+    .filter((g) => g.length > 1);
+  const extra = dupeGroups.reduce((n, g) => n + g.length - 1, 0);
+  $('dupes-status').textContent = dupeGroups.length
+    ? t('dupes.found', { groups: dupeGroups.length, extra })
+    : t('dupes.none');
+  $('dupes-clean').hidden = !dupeGroups.length;
+
+  $('dupes-list').replaceChildren(...dupeGroups.map((group) => {
+    const keeper = pickKeeper(group);
+    const box = document.createElement('div');
+    box.className = 'dupe-group';
+    for (const m of group) {
+      const row = document.createElement('div');
+      row.className = 'dupe-row';
+      const thumb = document.createElement('div');
+      thumb.className = 'dupe-ph';
+      if (m.hasThumb) {
+        thumbUrl(m.id).then((url) => {
+          if (!url) return;
+          const img = document.createElement('img');
+          img.src = url;
+          img.alt = '';
+          thumb.replaceWith(img);
+        });
+      }
+      const info = document.createElement('div');
+      info.className = 'dupe-info';
+      info.innerHTML = '<div class="t"></div><div class="s"></div>';
+      info.firstChild.textContent = displayTitle(m);
+      info.lastChild.textContent = [m.name, formatBytes(m.size), ...m.tags.slice(0, 3)].join(' · ');
+      row.append(thumb, info);
+      if (m.id === keeper.id) {
+        const keep = document.createElement('span');
+        keep.className = 'dupe-keep';
+        keep.textContent = t('dupes.keep');
+        row.append(keep);
+      } else {
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'btn small danger';
+        del.textContent = t('dupes.remove');
+        del.addEventListener('click', async () => {
+          await mergeAndRemove(keeper, [m]);
+          renderDupes();
+        });
+        row.append(del);
+      }
+      box.append(row);
+    }
+    return box;
+  }));
+}
+
+async function mergeAndRemove(keeper, others) {
+  const merged = mergeInto(keeper, others);
+  await updateModel(merged);
+  state.models[state.models.findIndex((m) => m.id === merged.id)] = merged;
+  await removeModels(others.map((o) => o.id));
+  dupeGroups = dupeGroups.map((g) => g.map((m) => (m.id === merged.id ? merged : m)));
+  render();
+}
+
+async function cleanAllDupes() {
+  const extra = dupeGroups.reduce((n, g) => n + g.length - 1, 0);
+  if (!extra || !confirm(t('dupes.confirm', { extra }))) return;
+  for (const group of dupeGroups) {
+    const keeper = pickKeeper(group);
+    await mergeAndRemove(keeper, group.filter((m) => m.id !== keeper.id));
+  }
+  toast(t('dupes.done', { n: extra }));
+  renderDupes();
+}
+
 /* ---------- settings ---------- */
 
 async function openSettings() {
@@ -443,6 +547,11 @@ function wire() {
     render();
   });
   $('btn-cleanup').addEventListener('click', startCleanup);
+  $('btn-dupes').addEventListener('click', openDupes);
+  $('dupes-clean').addEventListener('click', cleanAllDupes);
+  $('dupes-close').addEventListener('click', () => $('dupes-dialog').close());
+  $('btn-help').addEventListener('click', () => $('help-dialog').showModal());
+  $('help-close').addEventListener('click', () => $('help-dialog').close());
 
   $('v-close').addEventListener('click', () => closeViewer());
   $('v-prev').addEventListener('click', () => step(-1));
@@ -521,6 +630,13 @@ async function init() {
   state.models = await getAllModels();
   render();
   queueMissingThumbs();
+  // first visit: show the short explanation once
+  try {
+    if (!state.models.length && !localStorage.getItem('ml.helpSeen')) {
+      localStorage.setItem('ml.helpSeen', '1');
+      $('help-dialog').showModal();
+    }
+  } catch {}
 
   const oldest = state.models.reduce((min, m) => Math.min(min, m.added), Date.now());
   const reference = lastBackup() || oldest;

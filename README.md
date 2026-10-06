@@ -1,5 +1,7 @@
 # Model Library
 
+Een gratis tool van [Werkplaats Marc](https://www.werkplaatsmarc.be) · A free tool by [Werkplaats Marc](https://www.werkplaatsmarc.be)
+
 **NL** · [English below](#english)
 
 Een gratis, volledig lokale bibliotheek voor je 3D-printbestanden (**STL, 3MF, OBJ**). Voeg je bestanden toe, zie meteen thumbnails, bekijk ze in 3D en geef ze een naam, tags en notities, zodat je weer weet wat wat is. Werkt op telefoon, tablet en pc en kan als app geïnstalleerd worden.
@@ -49,6 +51,8 @@ A free, fully local library for your 3D-printing files (**STL, 3MF, OBJ**): add 
 Run it yourself: it is a static site, no build step (`python -m http.server`). For GitHub Pages, publish this folder and bump `VERSION` in `sw.js` after every change.
 
 ## Credits
+
+Made by [Werkplaats Marc](https://www.werkplaatsmarc.be).
 
 Built with [three.js](https://threejs.org/) (MIT) and [fflate](https://github.com/101arrowz/fflate) (MIT), bundled in `vendor/`.
 

@@ -178,3 +178,19 @@ main { padding: 0 14px calc(24px + var(--safe-b)); }
   border: 3px dashed var(--accent); display: flex; align-items: center; justify-content: center;
   font-size: 1.3rem; font-weight: 600; pointer-events: none;
 }
+
+/* Help and duplicates */
+.dialog.wide { width: min(640px, calc(100vw - 24px)); }
+.help-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; font-size: .95rem; }
+.dialog a { color: var(--accent); }
+.dupes-list { display: flex; flex-direction: column; gap: 12px; max-height: 50vh; overflow: auto; }
+.dupe-group { border: 1px solid var(--border); border-radius: 12px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.dupe-row { display: flex; align-items: center; gap: 10px; }
+.dupe-row img, .dupe-row .dupe-ph { width: 56px; height: 56px; object-fit: contain; background: var(--thumb-bg); border-radius: 8px; flex: none; }
+.dupe-info { flex: 1; min-width: 0; font-size: .88rem; }
+.dupe-info .t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dupe-info .s { color: var(--muted); font-size: .78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dupe-keep { color: var(--muted); font-size: .8rem; }
+
+.site-footer { text-align: center; padding: 8px 14px calc(24px + var(--safe-b)); font-size: .85rem; color: var(--muted); }
+.site-footer a { color: var(--accent); }

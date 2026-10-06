@@ -1,7 +1,7 @@
 // Offline cache for the app shell.
 // Strategy: network first, cache as fallback. Updates therefore show up on the next load
 // when online, and the app still works offline. Bump VERSION to clear old caches.
-const VERSION = 'v3';
+const VERSION = 'v4';
 const CACHE = `model-library-${VERSION}`;
 const ASSETS = [
   './',
@@ -9,6 +9,10 @@ const ASSETS = [
   'manifest.webmanifest',
   'css/style.css',
   'icons/icon.svg',
+  'icons/icon-192.png',
+  'icons/icon-512.png',
+  'icons/icon-maskable-512.png',
+  'icons/apple-touch-icon.png',
   'i18n/nl.json',
   'i18n/en.json',
   'js/app.js',
@@ -18,6 +22,7 @@ const ASSETS = [
   'js/thumbs.js',
   'js/viewer.js',
   'js/backup.js',
+  'js/dupes.js',
   'js/i18n.js',
   'vendor/three/three.module.js',
   'vendor/three/three.core.js',

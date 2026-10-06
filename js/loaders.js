@@ -93,22 +93,67 @@ export async function parseModel(blob, ext, { mtl = '' } = {}) {
  */
 function applySlicerColours(root, buffer) {
   const files = unzipSync(new Uint8Array(buffer), {
-    filter: (f) => f.name === 'Metadata/project_settings.config'
-      || f.name === 'Metadata/model_settings.config'
+    filter: (f) => /^Metadata\/(project_settings|model_settings|Slic3r_PE|Slic3r_PE_model)\.config$/.test(f.name)
       || f.name === '3D/3dmodel.model'
       || (f.name.startsWith('3D/Objects/') && f.name.endsWith('.model')),
   });
-  const settingsRaw = files['Metadata/project_settings.config'];
-  const configRaw = files['Metadata/model_settings.config'];
+  if (files['Metadata/project_settings.config'] && files['Metadata/model_settings.config']) applyBambuColours(root, files);
+  else if (files['Metadata/Slic3r_PE_model.config'] && files['Metadata/Slic3r_PE.config']) applyPrusaColours(root, files);
+}
+
+const HEX_COLOUR = /^#[0-9a-f]{6}/i;
+const parseXml = (raw) => new DOMParser().parseFromString(strFromU8(raw), 'application/xml');
+
+/** One shared standard material per colour. */
+function materialCache() {
+  const cache = new Map();
+  return (hex) => {
+    if (!HEX_COLOUR.test(hex || '')) return null;
+    if (!cache.has(hex)) {
+      cache.set(hex, new THREE.MeshStandardMaterial({
+        color: hex.slice(0, 7), roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide,
+      }));
+    }
+    return cache.get(hex);
+  };
+}
+
+const paintNode = (node, material) => {
+  if (material) node.traverse((o) => { if (o.isMesh) o.material = material; });
+};
+
+/**
+ * Give every triangle of every mesh under `node` its own colour. `hexOf(tri)` returns a colour
+ * or null (keep the mesh colour). Skipped when the triangle count does not match the file.
+ */
+function paintTriangles(node, triangleCount, hexOf) {
+  node.traverse((mesh) => {
+    const geo = mesh.geometry;
+    if (!mesh.isMesh || !geo?.index || geo.index.count / 3 !== triangleCount) return;
+    const flat = geo.toNonIndexed();
+    const base = new THREE.Color(mesh.material.color ?? 0xffffff);
+    const fill = new Float32Array(flat.getAttribute('position').count * 3);
+    for (let tri = 0; tri < triangleCount; tri++) {
+      const hex = hexOf(tri);
+      const c = HEX_COLOUR.test(hex || '') ? new THREE.Color(hex.slice(0, 7)) : base;
+      for (let v = 0; v < 3; v++) c.toArray(fill, (tri * 3 + v) * 3);
+    }
+    flat.setAttribute('color', new THREE.BufferAttribute(fill, 3));
+    mesh.geometry = flat;
+    mesh.material = new THREE.MeshStandardMaterial({
+      vertexColors: true, roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide,
+    });
+  });
+}
+
+/** Bambu Studio / OrcaSlicer: extruder per object/part, painted triangles in paint_color. */
+function applyBambuColours(root, files) {
+  const colours = JSON.parse(strFromU8(files['Metadata/project_settings.config'])).filament_colour;
   const modelRaw = files['3D/3dmodel.model'];
-  if (!settingsRaw || !configRaw || !modelRaw) return;
+  if (!Array.isArray(colours) || !colours.length || !modelRaw) return;
 
-  const colours = JSON.parse(strFromU8(settingsRaw)).filament_colour;
-  if (!Array.isArray(colours) || !colours.length) return;
-
-  const parse = (raw) => new DOMParser().parseFromString(strFromU8(raw), 'application/xml');
-  const config = parse(configRaw);
-  const model = parse(modelRaw);
+  const config = parseXml(files['Metadata/model_settings.config']);
+  const model = parseXml(modelRaw);
 
   const extruderOf = (el) => {
     const meta = [...el.children].find((c) => c.tagName === 'metadata' && c.getAttribute('key') === 'extruder');
@@ -129,21 +174,7 @@ function applySlicerColours(root, buffer) {
     })));
   }
   const items = [...model.querySelectorAll('build > item')].map((i) => i.getAttribute('objectid'));
-
-  const materials = new Map();
-  const materialFor = (extruder) => {
-    const hex = colours[extruder - 1];
-    if (!/^#[0-9a-f]{6}/i.test(hex || '')) return null;
-    if (!materials.has(hex)) {
-      materials.set(hex, new THREE.MeshStandardMaterial({
-        color: hex.slice(0, 7), roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide,
-      }));
-    }
-    return materials.get(hex);
-  };
-  const paint = (node, material) => {
-    if (material) node.traverse((o) => { if (o.isMesh) o.material = material; });
-  };
+  const materialFor = materialCache();
 
   // Parts painted in the slicer carry a paint_color per triangle (the extruder to use).
   const objectFiles = new Map(Object.entries(files).filter(([n]) => n.startsWith('3D/Objects/')).map(([n, d]) => [n, strFromU8(d)]));
@@ -152,34 +183,9 @@ function applySlicerColours(root, buffer) {
     const key = `${path}#${objectId}`;
     if (!paintCache.has(key)) {
       const text = objectFiles.get((path || '').replace(/^\//, ''));
-      let codes = null;
-      if (text?.includes('paint_color')) {
-        const block = text.match(new RegExp(`<object[^>]*\\bid="${objectId}"[\\s\\S]*?</object>`))?.[0] ?? '';
-        codes = [...block.matchAll(/<triangle\b[^>]*>/g)].map((m) => m[0].match(/paint_color="([0-9A-Fa-f]+)"/)?.[1] ?? '');
-      }
-      paintCache.set(key, codes);
+      paintCache.set(key, text?.includes('paint_color') ? triangleCodes(text, objectId, 'paint_color') : null);
     }
     return paintCache.get(key);
-  };
-  const applyPaint = (node, codes) => {
-    node.traverse((mesh) => {
-      const geo = mesh.geometry;
-      if (!mesh.isMesh || !geo?.index || geo.index.count / 3 !== codes.length) return;
-      const flat = geo.toNonIndexed();
-      const base = new THREE.Color(mesh.material.color ?? 0xffffff);
-      const fill = new Float32Array(flat.getAttribute('position').count * 3);
-      codes.forEach((code, tri) => {
-        const state = code ? decodePaint(code) : 0;
-        const hex = state > 0 ? colours[state - 1] : null;
-        const c = hex && /^#[0-9a-f]{6}/i.test(hex) ? new THREE.Color(hex.slice(0, 7)) : base;
-        for (let v = 0; v < 3; v++) c.toArray(fill, (tri * 3 + v) * 3);
-      });
-      flat.setAttribute('color', new THREE.BufferAttribute(fill, 3));
-      mesh.geometry = flat;
-      mesh.material = new THREE.MeshStandardMaterial({
-        vertexColors: true, roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide,
-      });
-    });
   };
 
   items.forEach((objectId, i) => {
@@ -187,14 +193,70 @@ function applySlicerColours(root, buffer) {
     const cfg = objectCfg.get(objectId);
     if (!item || !cfg) return;
     const parts = components.get(objectId) ?? [];
-    if (!parts.length || parts.length !== item.children.length) return paint(item, materialFor(cfg.extruder));
+    if (!parts.length || parts.length !== item.children.length) return paintNode(item, materialFor(colours[cfg.extruder - 1]));
     parts.forEach((part, j) => {
       const node = item.children[j];
-      paint(node, materialFor(cfg.parts.get(part.id) || cfg.extruder));
+      paintNode(node, materialFor(colours[(cfg.parts.get(part.id) || cfg.extruder) - 1]));
       const codes = paintCodes(part.path, part.id);
-      if (codes) applyPaint(node, codes);
+      if (codes) paintTriangles(node, codes.length, (t) => (codes[t] ? colours[decodePaint(codes[t]) - 1] : null));
     });
   });
+}
+
+/**
+ * PrusaSlicer: extruder per object and per volume (a volume is a range of triangles) in
+ * Slic3r_PE_model.config, colours in Slic3r_PE.config, painted triangles in
+ * slic3rpe:mmu_segmentation. Every object is a single mesh with its triangles in file order.
+ */
+function applyPrusaColours(root, files) {
+  const modelRaw = files['3D/3dmodel.model'];
+  if (!modelRaw) return;
+  const ini = strFromU8(files['Metadata/Slic3r_PE.config']);
+  const line = ini.match(/^;\s*extruder_colour\s*=\s*(.*)$/m)?.[1] ?? ini.match(/^;\s*filament_colour\s*=\s*(.*)$/m)?.[1] ?? '';
+  const colours = line.match(/#[0-9a-fA-F]{6}/g) ?? [];
+  if (!colours.length) return;
+
+  const config = parseXml(files['Metadata/Slic3r_PE_model.config']);
+  const modelText = strFromU8(modelRaw);
+  const model = parseXml(modelRaw);
+  const items = [...model.querySelectorAll('build > item')].map((i) => i.getAttribute('objectid'));
+  const materialFor = materialCache();
+
+  const extruderOf = (el) => {
+    const meta = [...el.children].find((c) => c.tagName === 'metadata' && c.getAttribute('key') === 'extruder');
+    return meta ? parseInt(meta.getAttribute('value'), 10) : 0;
+  };
+
+  items.forEach((objectId, i) => {
+    const item = root.children[i];
+    const obj = [...config.querySelectorAll('config > object')].find((o) => o.getAttribute('id') === objectId);
+    if (!item) return;
+    const objectExtruder = obj ? extruderOf(obj) || 1 : 1;
+    paintNode(item, materialFor(colours[objectExtruder - 1]));
+
+    const volumes = obj ? [...obj.querySelectorAll(':scope > volume')].map((v) => ({
+      first: parseInt(v.getAttribute('firstid'), 10),
+      last: parseInt(v.getAttribute('lastid'), 10),
+      extruder: extruderOf(v) || objectExtruder,
+    })) : [];
+    const codes = modelText.includes('mmu_segmentation') ? triangleCodes(modelText, objectId, 'slic3rpe:mmu_segmentation') : null;
+    const differs = volumes.some((v) => v.extruder !== objectExtruder);
+    if (!codes && !differs) return;
+
+    const count = codes?.length ?? Math.max(0, ...volumes.map((v) => v.last + 1));
+    const volumeExtruder = (t) => volumes.find((v) => t >= v.first && t <= v.last)?.extruder ?? objectExtruder;
+    paintTriangles(item, count, (t) => {
+      const painted = codes?.[t] ? decodePaint(codes[t]) : 0;
+      return colours[(painted || volumeExtruder(t)) - 1];
+    });
+  });
+}
+
+/** Per-triangle values of one attribute (e.g. paint_color) for an object, '' where missing. */
+function triangleCodes(text, objectId, attribute) {
+  const block = text.match(new RegExp(`<object[^>]*\\bid="${objectId}"[\\s\\S]*?</object>`))?.[0] ?? '';
+  const attr = new RegExp(`${attribute}="([0-9A-Fa-f]+)"`);
+  return [...block.matchAll(/<triangle\b[^>]*>/g)].map((m) => m[0].match(attr)?.[1] ?? '');
 }
 
 /**
