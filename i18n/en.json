@@ -147,5 +147,6 @@
   "del.diskwarning": "{n} of these models are linked to a file on your disk. You can also delete that file from your disk. This is permanent: there is no recycle bin.",
   "del.remove": "Remove",
   "del.libraryOnly": "Only from the library",
-  "del.alsoDisk": "Also delete from disk ({n})"
+  "del.alsoDisk": "Also delete from disk ({n})",
+  "settings.import.hint": "Choose the .zip file of your backup. If you do not see it, pick another location in the file picker (e.g. Downloads or the folder where you received it)."
 }

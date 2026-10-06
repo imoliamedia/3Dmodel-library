@@ -147,5 +147,6 @@
   "del.diskwarning": "{n} van deze modellen is gekoppeld aan een bestand op je schijf. Je kunt dat bestand ook van je schijf verwijderen. Dat is permanent: er is geen prullenbak.",
   "del.remove": "Verwijderen",
   "del.libraryOnly": "Enkel uit de bibliotheek",
-  "del.alsoDisk": "Ook van schijf verwijderen ({n})"
+  "del.alsoDisk": "Ook van schijf verwijderen ({n})",
+  "settings.import.hint": "Kies het .zip-bestand van je back-up. Zie je het niet, kies dan in de bestandskiezer een andere locatie (bv. Downloads of de map waar je het ontving)."
 }
