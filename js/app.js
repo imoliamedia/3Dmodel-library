@@ -280,8 +280,10 @@ async function applyBulk(clearFolder = false) {
 
 async function deleteSelected() {
   const ids = [...state.selected];
-  if (!ids.length || !confirm(t('bulk.delete.confirm', { n: ids.length }))) return;
-  await removeModels(ids);
+  if (!ids.length) return;
+  const choice = await askDelete(ids, t('del.subject.n', { n: ids.length }));
+  if (!choice) return;
+  await removeModels(ids, { disk: choice === 'disk' });
   state.selected.clear();
   render();
   toast(t('bulk.deleted', { n: ids.length }));
@@ -504,8 +506,10 @@ async function toggleFav() {
 
 async function deleteCurrent() {
   const m = currentMeta();
-  if (!m || !confirm(t('detail.confirmdelete', { name: displayTitle(m) }))) return;
-  await removeModels([m.id]);
+  if (!m) return;
+  const choice = await askDelete([m.id], t('del.subject.one', { name: displayTitle(m) }));
+  if (!choice) return;
+  await removeModels([m.id], { disk: choice === 'disk' });
   state.viewerIds.splice(state.viewerIndex, 1);
   render();
   if (!state.viewerIds.length) return closeViewer();
@@ -523,6 +527,53 @@ async function downloadCurrent() {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+/* ---------- dialogs ---------- */
+
+/**
+ * Styled replacement for window.confirm(): shows a message and a list of buttons.
+ * Resolves with the clicked button's value, or null when closed with Escape.
+ */
+function choose({ title, message, buttons }) {
+  return new Promise((resolve) => {
+    const dialog = $('choice-dialog');
+    $('choice-title').textContent = title;
+    $('choice-message').textContent = message;
+    let result = null;
+    const els = buttons.map((b) => {
+      const el = document.createElement('button');
+      el.type = 'button';
+      el.className = `btn block ${b.kind || ''}`;
+      el.textContent = b.label;
+      el.addEventListener('click', () => { result = b.value; dialog.close(); });
+      return el;
+    });
+    $('choice-buttons').replaceChildren(...els);
+    dialog.addEventListener('close', () => resolve(result), { once: true });
+    dialog.showModal();
+    // focus the safe button so a stray Enter never deletes anything
+    els[buttons.findIndex((b) => b.value === null)]?.focus();
+  });
+}
+
+const linkedCount = (ids) => (syncEnabled() ? ids.map(byId).filter((m) => m?.path).length : 0);
+
+/**
+ * Ask before removing models. Returns null (cancelled), 'library' (only from the library)
+ * or 'disk' (also delete the linked files from the disk).
+ */
+function askDelete(ids, subject) {
+  const linked = linkedCount(ids);
+  const message = [t('del.message', { what: subject }), linked ? t('del.diskwarning', { n: linked }) : t('del.keepfiles')].join('\n\n');
+  const buttons = linked
+    ? [
+      { label: t('del.libraryOnly'), value: 'library', kind: 'primary' },
+      { label: t('del.alsoDisk', { n: linked }), value: 'disk', kind: 'destructive' },
+    ]
+    : [{ label: t('del.remove'), value: 'library', kind: 'destructive' }];
+  buttons.push({ label: t('common.cancel'), value: null, kind: 'ghost' });
+  return choose({ title: t('del.title'), message, buttons });
 }
 
 /* ---------- disk link (optional, Chrome/Edge on desktop) ---------- */
@@ -554,13 +605,12 @@ async function syncToDisk(m, next) {
   }
 }
 
-/** Ask whether the files should also be removed from the disk. Cancel keeps them there. */
+/** Delete the linked files of these models from the disk (the user already agreed in askDelete). */
 async function deleteFromDisk(ids) {
   if (!syncEnabled()) return;
   const linked = ids.map(byId).filter((m) => m?.path);
   if (!linked.length) return;
   if (!(await ensureWrite())) return toast(t('disk.nopermission'));
-  if (!confirm(t('disk.confirm.delete', { n: linked.length }))) return;
   let n = 0;
   for (const m of linked) {
     try { await deleteFile(m.path); n++; } catch (err) { toast(diskMessage(err, m), 6000); }
@@ -647,7 +697,7 @@ async function unlinkFolder() {
 
 let dupeGroups = [];
 
-async function removeModels(ids, { disk = true } = {}) {
+async function removeModels(ids, { disk = false } = {}) {
   if (disk) await deleteFromDisk(ids);
   for (const id of ids) {
     await deleteModel(id);
@@ -716,7 +766,10 @@ function renderDupes() {
         del.className = 'btn small danger';
         del.textContent = t('dupes.remove');
         del.addEventListener('click', async () => {
-          await mergeAndRemove(keeper, [m]);
+          // only ask when a linked file could also be deleted from the disk
+          const choice = linkedCount([m.id]) ? await askDelete([m.id], t('del.subject.dupes', { n: 1 })) : 'library';
+          if (!choice) return;
+          await mergeAndRemove(keeper, [m], { disk: choice === 'disk' });
           renderDupes();
         });
         row.append(del);
@@ -738,9 +791,11 @@ async function mergeAndRemove(keeper, others, opts) {
 
 async function cleanAllDupes() {
   const extra = dupeGroups.reduce((n, g) => n + g.length - 1, 0);
-  if (!extra || !confirm(t('dupes.confirm', { extra }))) return;
+  if (!extra) return;
   const removing = dupeGroups.flatMap((g) => { const k = pickKeeper(g); return g.filter((m) => m.id !== k.id).map((m) => m.id); });
-  await deleteFromDisk(removing);
+  const choice = await askDelete(removing, t('del.subject.dupes', { n: extra }));
+  if (!choice) return;
+  if (choice === 'disk') await deleteFromDisk(removing);
   for (const group of dupeGroups) {
     const keeper = pickKeeper(group);
     await mergeAndRemove(keeper, group.filter((m) => m.id !== keeper.id), { disk: false });

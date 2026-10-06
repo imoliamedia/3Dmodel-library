@@ -8,6 +8,7 @@
   --accent: #2563eb;
   --accent-text: #ffffff;
   --danger: #c62828;
+  --on-danger: #ffffff;
   --thumb-bg: #e4e7ee;
   --radius: 12px;
   --safe-b: env(safe-area-inset-bottom, 0px);
@@ -17,13 +18,13 @@
   :root:not([data-theme="light"]) {
     --bg: #14161a; --surface: #1d2025; --surface-2: #272b32; --text: #e8eaee;
     --muted: #9099a8; --border: #313641; --accent: #4c8dff; --accent-text: #0b1220;
-    --danger: #ef6b6b; --thumb-bg: #23272e;
+    --danger: #ef6b6b; --on-danger: #2a0a0a; --thumb-bg: #23272e;
   }
 }
 :root[data-theme="dark"] {
   --bg: #14161a; --surface: #1d2025; --surface-2: #272b32; --text: #e8eaee;
   --muted: #9099a8; --border: #313641; --accent: #4c8dff; --accent-text: #0b1220;
-  --danger: #ef6b6b; --thumb-bg: #23272e;
+  --danger: #ef6b6b; --on-danger: #2a0a0a; --thumb-bg: #23272e;
 }
 
 * { box-sizing: border-box; }
@@ -218,3 +219,9 @@ body.has-sel .toast { bottom: calc(90px + var(--safe-b)); }
 
 .check { display: flex; align-items: flex-start; gap: 10px; font-size: .95rem; padding: 6px 0; cursor: pointer; }
 .check input { width: 22px; height: 22px; margin: 0; flex: none; accent-color: var(--accent); }
+
+/* Confirmation dialog */
+.choice-message { margin: 0; white-space: pre-line; color: var(--text); line-height: 1.45; }
+.choice-buttons { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.btn.destructive { background: var(--danger); border-color: var(--danger); color: var(--on-danger); font-weight: 600; }
+.btn.destructive:hover { filter: brightness(1.1); background: var(--danger); }
