@@ -20,8 +20,11 @@ const state = {
   thumbUrls: new Map(),
   viewerIds: [],
   viewerIndex: 0,
-  cleanup: false,
+  folder: '', // '' = all, NO_FOLDER = models without a folder, otherwise a folder name
+  selected: new Set(),
 };
+
+const NO_FOLDER = '__none__';
 
 let viewer = null; // created lazily: WebGL is only needed once a model is opened
 let observer = null;
@@ -101,8 +104,9 @@ function visibleModels() {
     if (state.filter === 'fav' && !m.fav) return false;
     if (state.filter === 'unnamed' && m.title) return false;
     if (state.tag && !m.tags.includes(state.tag)) return false;
+    if (state.folder === NO_FOLDER ? m.folder : state.folder && m.folder !== state.folder) return false;
     if (q) {
-      const hay = `${m.title} ${m.name} ${m.tags.join(' ')} ${m.note}`.toLowerCase();
+      const hay = `${m.title} ${m.name} ${m.folder || ''} ${m.tags.join(' ')} ${m.note}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -117,11 +121,14 @@ function visibleModels() {
 }
 
 function buildCard(m) {
-  const card = document.createElement('button');
-  card.className = 'card';
-  card.type = 'button';
+  const card = document.createElement('div');
+  card.className = `card${state.selected.has(m.id) ? ' selected' : ''}`;
   card.dataset.id = m.id;
+  card.tabIndex = 0;
+  card.setAttribute('role', 'button');
 
+  const wrap = document.createElement('div');
+  wrap.className = 'thumb-wrap';
   const thumb = document.createElement('div');
   thumb.className = 'thumb';
   if (m.hasThumb) {
@@ -142,6 +149,21 @@ function buildCard(m) {
   ext.className = 'badge-ext';
   ext.textContent = m.ext.toUpperCase();
 
+  const check = document.createElement('input');
+  check.type = 'checkbox';
+  check.className = 'sel';
+  check.checked = state.selected.has(m.id);
+  check.setAttribute('aria-label', displayTitle(m));
+  check.addEventListener('click', (e) => { e.stopPropagation(); toggleSelect(m.id, check.checked); });
+
+  wrap.append(thumb, ext, check);
+  if (m.fav) {
+    const star = document.createElement('span');
+    star.className = 'badge-fav';
+    star.textContent = '★';
+    wrap.append(star);
+  }
+
   const info = document.createElement('div');
   info.className = 'card-info';
   const title = document.createElement('div');
@@ -149,19 +171,130 @@ function buildCard(m) {
   title.textContent = displayTitle(m);
   const sub = document.createElement('div');
   sub.className = 'card-sub';
-  sub.textContent = [m.dims ? `${Math.round(m.dims.h)} mm` : '', formatBytes(m.size), ...m.tags.slice(0, 2)].filter(Boolean).join(' · ');
+  sub.textContent = [m.folder ? `📁 ${m.folder}` : '', m.dims ? `${Math.round(m.dims.h)} mm` : '', formatBytes(m.size), ...m.tags.slice(0, 2)].filter(Boolean).join(' · ');
   info.append(title, sub);
 
-  card.append(thumb, ext);
-  if (m.fav) {
-    const star = document.createElement('span');
-    star.className = 'badge-fav';
-    star.textContent = '★';
-    card.append(star);
-  }
-  card.append(info);
-  card.addEventListener('click', () => openViewer(m.id, visibleModels().map((x) => x.id), false));
+  card.append(wrap, info);
+  const activate = () => {
+    if (state.selected.size) toggleSelect(m.id, !state.selected.has(m.id));
+    else openViewer(m.id, visibleModels().map((x) => x.id));
+  };
+  card.addEventListener('click', activate);
+  card.addEventListener('keydown', (e) => {
+    if (e.target === card && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); activate(); }
+  });
   return card;
+}
+
+/* ---------- selection ---------- */
+
+function toggleSelect(id, on) {
+  if (on) state.selected.add(id); else state.selected.delete(id);
+  const card = document.querySelector(`.card[data-id="${id}"]`);
+  if (card) {
+    card.classList.toggle('selected', on);
+    card.querySelector('.sel').checked = on;
+  }
+  updateSelBar();
+}
+
+function clearSelection() {
+  state.selected.clear();
+  document.querySelectorAll('.card.selected').forEach((c) => {
+    c.classList.remove('selected');
+    c.querySelector('.sel').checked = false;
+  });
+  updateSelBar();
+}
+
+function updateSelBar() {
+  const n = state.selected.size;
+  $('selbar').hidden = n === 0;
+  document.body.classList.toggle('has-sel', n > 0);
+  $('sel-count').textContent = t('bulk.selected', { n });
+  const visible = visibleModels();
+  const all = visible.length > 0 && visible.every((m) => state.selected.has(m.id));
+  $('sel-all').textContent = t(all ? 'bulk.none' : 'bulk.all');
+}
+
+function toggleSelectAll() {
+  const visible = visibleModels();
+  const all = visible.length > 0 && visible.every((m) => state.selected.has(m.id));
+  visible.forEach((m) => (all ? state.selected.delete(m.id) : state.selected.add(m.id)));
+  render();
+}
+
+let bulkMode = null;
+
+function openBulk(mode) {
+  bulkMode = mode;
+  const n = state.selected.size;
+  $('bulk-title').textContent = t(mode === 'folder' ? 'bulk.move.title' : 'bulk.tags.title', { n });
+  $('bulk-input').placeholder = t(mode === 'folder' ? 'bulk.move.placeholder' : 'bulk.tags.placeholder');
+  $('bulk-input').value = '';
+  $('bulk-nofolder').hidden = mode !== 'folder';
+  const options = mode === 'folder' ? folderNames() : allTags();
+  $('bulk-list').replaceChildren(...options.map((v) => Object.assign(document.createElement('option'), { value: v })));
+  $('bulk-dialog').showModal();
+  $('bulk-input').focus();
+}
+
+async function applyBulk(clearFolder = false) {
+  const raw = $('bulk-input').value.trim();
+  if (!clearFolder && !raw) return;
+  const ids = [...state.selected];
+  const existing = folderNames();
+  let count = 0;
+  for (const id of ids) {
+    const m = byId(id);
+    if (!m) continue;
+    let next;
+    if (bulkMode === 'folder') {
+      // reuse an existing folder's spelling so "Kaas" and "kaas" do not become two folders
+      const folder = clearFolder ? '' : (existing.find((f) => f.toLowerCase() === raw.toLowerCase()) ?? raw);
+      next = { ...m, folder };
+    } else {
+      next = { ...m, tags: [...new Set([...m.tags, ...parseTags(raw)])] };
+    }
+    await updateModel(next);
+    state.models[state.models.findIndex((x) => x.id === id)] = next;
+    count++;
+  }
+  $('bulk-dialog').close();
+  toast(t(bulkMode === 'folder' ? 'bulk.moved' : 'bulk.tagged', { n: count }));
+  clearSelection();
+  render();
+}
+
+async function deleteSelected() {
+  const ids = [...state.selected];
+  if (!ids.length || !confirm(t('bulk.delete.confirm', { n: ids.length }))) return;
+  await removeModels(ids);
+  state.selected.clear();
+  render();
+  toast(t('bulk.deleted', { n: ids.length }));
+}
+
+function folderNames() {
+  return [...new Set(state.models.map((m) => m.folder).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+}
+
+function allTags() {
+  return [...new Set(state.models.flatMap((m) => m.tags))].sort((a, b) => a.localeCompare(b));
+}
+
+function renderFolderFilter() {
+  const counts = new Map();
+  state.models.forEach((m) => { if (m.folder) counts.set(m.folder, (counts.get(m.folder) || 0) + 1); });
+  const sel = $('folder-filter');
+  sel.replaceChildren(new Option(t('filter.allfolders'), ''));
+  if (counts.size) sel.add(new Option(`${t('filter.nofolder')} (${state.models.filter((m) => !m.folder).length})`, NO_FOLDER));
+  [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0])).forEach(([f, n]) => sel.add(new Option(`📁 ${f} (${n})`, f)));
+  if (state.folder && state.folder !== NO_FOLDER && !counts.has(state.folder)) state.folder = '';
+  if (state.folder === NO_FOLDER && !counts.size) state.folder = '';
+  sel.value = state.folder;
+  sel.hidden = counts.size === 0;
+  $('folder-list').replaceChildren(...[...counts.keys()].map((f) => Object.assign(document.createElement('option'), { value: f })));
 }
 
 function renderTagFilter() {
@@ -185,8 +318,12 @@ function render() {
   $('empty').hidden = !empty;
   $('no-results').hidden = empty || list.length > 0;
   document.querySelector('.toolbar').hidden = empty;
+  const present = new Set(state.models.map((m) => m.id));
+  state.selected.forEach((id) => { if (!present.has(id)) state.selected.delete(id); });
   grid.replaceChildren(...list.map(buildCard));
   renderTagFilter();
+  renderFolderFilter();
+  updateSelBar();
 }
 
 /* ---------- importing ---------- */
@@ -216,13 +353,14 @@ async function handleFiles(files) {
 /* ---------- viewer ---------- */
 
 const fields = {
-  title: () => $('d-title'), tags: () => $('d-tags'), note: () => $('d-note'),
+  title: () => $('d-title'), folder: () => $('d-folder'), tags: () => $('d-tags'), note: () => $('d-note'),
 };
 
 const currentMeta = () => byId(state.viewerIds[state.viewerIndex]);
 
 function isDirty(m) {
   return fields.title().value.trim() !== m.title
+    || fields.folder().value.trim() !== (m.folder || '')
     || parseTags(fields.tags().value).join(',') !== m.tags.join(',')
     || fields.note().value !== m.note;
 }
@@ -233,6 +371,7 @@ async function saveCurrent({ quiet = false } = {}) {
   const next = {
     ...m,
     title: fields.title().value.trim(),
+    folder: fields.folder().value.trim(),
     tags: parseTags(fields.tags().value),
     note: fields.note().value,
   };
@@ -268,6 +407,7 @@ async function loadCurrent() {
   const m = currentMeta();
   if (!m) return closeViewer();
   fields.title().value = m.title;
+  fields.folder().value = m.folder || '';
   fields.title().placeholder = stemOf(m.name);
   fields.tags().value = m.tags.join(', ');
   fields.note().value = m.note;
@@ -300,10 +440,9 @@ async function loadCurrent() {
   }
 }
 
-async function openViewer(id, ids, cleanup) {
+async function openViewer(id, ids) {
   state.viewerIds = ids;
   state.viewerIndex = Math.max(0, ids.indexOf(id));
-  state.cleanup = cleanup;
   if (!viewer) viewer = new Viewer($('viewer-canvas'));
   $('viewer').hidden = false;
   document.body.style.overflow = 'hidden';
@@ -365,12 +504,6 @@ async function downloadCurrent() {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
-}
-
-function startCleanup() {
-  const ids = state.models.filter((m) => !m.title).sort((a, b) => b.added - a.added).map((m) => m.id);
-  if (!ids.length) return toast(t('cleanup.none'));
-  openViewer(ids[0], ids, true);
 }
 
 /* ---------- duplicates ---------- */
@@ -546,8 +679,17 @@ function wire() {
     document.querySelectorAll('#chips .chip').forEach((c) => c.classList.toggle('active', c === chip));
     render();
   });
-  $('btn-cleanup').addEventListener('click', startCleanup);
   $('btn-dupes').addEventListener('click', openDupes);
+  $('folder-filter').addEventListener('change', (e) => { state.folder = e.target.value; render(); });
+  $('sel-all').addEventListener('click', toggleSelectAll);
+  $('sel-move').addEventListener('click', () => openBulk('folder'));
+  $('sel-tags').addEventListener('click', () => openBulk('tags'));
+  $('sel-delete').addEventListener('click', deleteSelected);
+  $('sel-cancel').addEventListener('click', clearSelection);
+  $('bulk-ok').addEventListener('click', () => applyBulk(false));
+  $('bulk-nofolder').addEventListener('click', () => applyBulk(true));
+  $('bulk-cancel').addEventListener('click', () => $('bulk-dialog').close());
+  $('bulk-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); applyBulk(false); } });
   $('dupes-clean').addEventListener('click', cleanAllDupes);
   $('dupes-close').addEventListener('click', () => $('dupes-dialog').close());
   $('btn-help').addEventListener('click', () => $('help-dialog').showModal());
@@ -570,12 +712,14 @@ function wire() {
     if (e.key !== 'Enter') return;
     e.preventDefault();
     await saveCurrent();
-    if (state.cleanup) await step(1);
   });
 
   window.addEventListener('popstate', () => closeViewer({ fromPop: true }));
   window.addEventListener('keydown', (e) => {
-    if ($('viewer').hidden) return;
+    if ($('viewer').hidden) {
+      if (e.key === 'Escape' && state.selected.size && !document.querySelector('dialog[open]')) clearSelection();
+      return;
+    }
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName);
     if (e.key === 'Escape') closeViewer();
     else if (!typing && e.key === 'ArrowLeft') step(-1);

@@ -54,6 +54,7 @@ export function mergeInto(keeper, others) {
   for (const o of others) {
     if (!merged.title && o.title) merged.title = o.title;
     if (!merged.note && o.note) merged.note = o.note;
+    if (!merged.folder && o.folder) merged.folder = o.folder;
     merged.fav = merged.fav || o.fav;
     merged.tags = [...new Set([...merged.tags, ...o.tags])];
   }

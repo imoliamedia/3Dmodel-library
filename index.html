@@ -37,13 +37,13 @@
       <button class="chip" data-filter="fav" data-i18n="filter.fav">&#9733; Favorieten</button>
       <button class="chip" data-filter="unnamed" data-i18n="filter.unnamed">Nog niet benoemd</button>
     </div>
+    <select id="folder-filter" class="select" data-i18n-aria-label="filter.folder"></select>
     <select id="tag-filter" class="select" data-i18n-aria-label="filter.tag"></select>
     <select id="sort" class="select" data-i18n-aria-label="sort.label">
       <option value="added" data-i18n="sort.added">Recent toegevoegd</option>
       <option value="name" data-i18n="sort.name">Naam</option>
       <option value="size" data-i18n="sort.size">Bestandsgrootte</option>
     </select>
-    <button id="btn-cleanup" class="btn" data-i18n="cleanup.button">Opruimen</button>
     <button id="btn-dupes" class="btn" data-i18n="dupes.button">Dubbelen zoeken</button>
   </div>
 
@@ -103,6 +103,11 @@
       </label>
       <p class="filename" id="d-file"></p>
       <label class="field">
+        <span data-i18n="detail.folder">Map</span>
+        <input id="d-folder" type="text" list="folder-list" autocomplete="off">
+        <datalist id="folder-list"></datalist>
+      </label>
+      <label class="field">
         <span data-i18n="detail.tags">Tags (met komma gescheiden)</span>
         <input id="d-tags" type="text" list="tag-list" autocomplete="off">
         <datalist id="tag-list"></datalist>
@@ -129,6 +134,25 @@
     </aside>
   </div>
 
+  <!-- Selection bar -->
+  <div id="selbar" class="selbar" hidden>
+    <span id="sel-count" class="sel-count"></span>
+    <button id="sel-all" class="btn small" data-i18n="bulk.all">Alles</button>
+    <button id="sel-move" class="btn small" data-i18n="bulk.move">Naar map</button>
+    <button id="sel-tags" class="btn small" data-i18n="bulk.tags">Tags</button>
+    <button id="sel-delete" class="btn small danger" data-i18n="bulk.delete">Verwijderen</button>
+    <button id="sel-cancel" class="btn small icon" data-i18n-aria-label="common.close" aria-label="Sluiten">&#10005;</button>
+  </div>
+
+  <dialog id="bulk-dialog" class="dialog">
+    <h2 id="bulk-title"></h2>
+    <input id="bulk-input" type="text" list="bulk-list" autocomplete="off">
+    <datalist id="bulk-list"></datalist>
+    <button id="bulk-ok" class="btn primary block" data-i18n="bulk.apply">Toepassen</button>
+    <button id="bulk-nofolder" class="btn block" data-i18n="bulk.nofolder">Uit map halen</button>
+    <button id="bulk-cancel" class="btn block ghost" data-i18n="common.cancel">Annuleren</button>
+  </dialog>
+
   <!-- Help -->
   <dialog id="help-dialog" class="dialog wide">
     <h2 data-i18n="help.title">Hoe werkt het?</h2>
@@ -137,7 +161,7 @@
       <li data-i18n-html="help.step.add"><b>Toevoegen:</b> tik op Toevoegen en kies bestanden of een hele map, of sleep ze in het venster.</li>
       <li data-i18n-html="help.step.view"><b>Bekijken:</b> tik op een model om het te draaien en te zoomen. De afmetingen staan eronder.</li>
       <li data-i18n-html="help.step.name"><b>Benoemen:</b> geef elk model een eigen naam, tags en een notitie. Zo weet je later weer wat wat is.</li>
-      <li data-i18n-html="help.step.tidy"><b>Opruimen:</b> de knop Opruimen loopt door je naamloze modellen. Enter bewaart en gaat naar het volgende.</li>
+      <li data-i18n-html="help.step.tidy"><b>Selecteren:</b> vink modellen aan (rechtsboven) om ze samen naar een map te verplaatsen, te taggen of te verwijderen.</li>
       <li data-i18n-html="help.step.dupes"><b>Dubbelen:</b> vind identieke bestanden onder verschillende namen en ruim ze op.</li>
       <li data-i18n-html="help.step.colours"><b>Kleuren:</b> 3MF-kleuren van Bambu Studio, OrcaSlicer en PrusaSlicer worden getoond. Bij OBJ kies je het .mtl-bestand samen met de .obj.</li>
       <li data-i18n-html="help.step.backup"><b>Back-up:</b> je bibliotheek staat enkel in deze browser. Maak af en toe een back-up via Instellingen, ook om van toestel te wisselen.</li>

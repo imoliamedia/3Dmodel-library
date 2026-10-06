@@ -56,7 +56,7 @@ export async function importBackup(file) {
     if (match) {
       // Same model already here: a catalog-only backup restores names/tags/notes onto it.
       if (!data) {
-        await updateModel({ ...match, title: meta.title, tags: meta.tags, note: meta.note, fav: meta.fav });
+        await updateModel({ ...match, title: meta.title, folder: meta.folder || '', tags: meta.tags, note: meta.note, fav: meta.fav });
         merged++;
       } else {
         skipped++;
