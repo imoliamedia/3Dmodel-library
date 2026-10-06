@@ -1,5 +1,5 @@
 // Offline cache for the app shell. Bump VERSION when files change.
-const VERSION = 'v1';
+const VERSION = 'v2';
 const CACHE = `model-library-${VERSION}`;
 const ASSETS = [
   './',
@@ -21,6 +21,7 @@ const ASSETS = [
   'vendor/three/three.core.js',
   'vendor/three/addons/loaders/STLLoader.js',
   'vendor/three/addons/loaders/OBJLoader.js',
+  'vendor/three/addons/loaders/MTLLoader.js',
   'vendor/three/addons/loaders/3MFLoader.js',
   'vendor/three/addons/controls/OrbitControls.js',
   'vendor/three/addons/utils/BufferGeometryUtils.js',

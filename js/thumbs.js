@@ -41,7 +41,7 @@ export async function generateThumb(meta) {
     if (meta.ext === '3mf') thumb = await extract3mfThumbnail(blob);
 
     // Always parse for the dimensions; render only if the file had no embedded preview.
-    const { object, dims } = await parseModel(blob, meta.ext);
+    const { object, dims } = await parseModel(blob, meta.ext, { mtl: meta.mtl });
     next.dims = dims;
     if (!thumb) thumb = await renderToBlob(object);
     disposeObject(object);

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
 import { ThreeMFLoader } from 'three/addons/loaders/3MFLoader.js';
 import { unzipSync } from 'three/addons/libs/fflate.module.js';
 
@@ -19,7 +20,7 @@ const defaultMaterial = () => new THREE.MeshStandardMaterial({
  * Slicer files are Z-up, so everything is rotated -90deg around X.
  * Returns { object, dims } where dims = { w, d, h } in model units (mm).
  */
-export async function parseModel(blob, ext) {
+export async function parseModel(blob, ext, { mtl = '' } = {}) {
   let content;
   if (ext === 'stl') {
     const geo = new STLLoader().parse(await blob.arrayBuffer());
@@ -27,11 +28,27 @@ export async function parseModel(blob, ext) {
     geo.computeVertexNormals();
     content = new THREE.Mesh(geo, defaultMaterial());
   } else if (ext === 'obj') {
-    content = new OBJLoader().parse(await blob.text());
+    const loader = new OBJLoader();
+    if (mtl) {
+      // Only the colours are used: texture maps would need extra files, so drop those lines.
+      const materials = new MTLLoader().parse(mtl.replace(/^\s*(map_|bump|disp|decal|refl)\S*.*$/gim, ''), '');
+      materials.preload();
+      loader.setMaterials(materials);
+    }
+    content = loader.parse(await blob.text());
     content.traverse((o) => {
       if (!o.isMesh) return;
       if (!o.geometry.getAttribute('normal')) o.geometry.computeVertexNormals();
-      o.material = defaultMaterial();
+      const hasColors = !!o.geometry.getAttribute('color');
+      if (mtl) {
+        (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { m.side = THREE.DoubleSide; });
+      } else if (hasColors) {
+        o.material = new THREE.MeshStandardMaterial({
+          vertexColors: true, roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide,
+        });
+      } else {
+        o.material = defaultMaterial();
+      }
     });
   } else if (ext === '3mf') {
     content = new ThreeMFLoader().parse(await blob.arrayBuffer());

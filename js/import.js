@@ -1,5 +1,5 @@
 import { isModelFile, extOf } from './loaders.js';
-import { addModel } from './db.js';
+import { addModel, updateModel } from './db.js';
 
 /** Collect File objects from a drop event, including dropped folders. */
 export async function filesFromDrop(dataTransfer) {
@@ -32,18 +32,27 @@ export async function filesFromDrop(dataTransfer) {
 export async function importFiles(files, existing, onProgress) {
   const list = [...files].filter((f) => f && f.name);
   const models = list.filter((f) => isModelFile(f.name));
-  const seen = new Set(existing.map((m) => `${m.name}|${m.size}|${m.lastModified}`));
-  const result = { added: [], dupes: 0, skipped: list.length - models.length };
+  // .mtl files carry the OBJ colours; they are not models themselves but get attached to their OBJ.
+  const mtlFiles = new Map(list.filter((f) => extOf(f.name) === 'mtl').map((f) => [f.name.toLowerCase(), f]));
+  const known = new Map(existing.map((m) => [`${m.name}|${m.size}|${m.lastModified}`, m]));
+  const result = { added: [], updated: [], dupes: 0, skipped: list.length - models.length - mtlFiles.size };
 
   let done = 0;
   for (const file of models) {
     const key = `${file.name}|${file.size}|${file.lastModified}`;
-    if (seen.has(key)) {
-      result.dupes++;
+    const mtl = file.name.toLowerCase().endsWith('.obj') ? await findMtl(file, mtlFiles) : '';
+    const match = known.get(key);
+    if (match) {
+      if (mtl && !match.mtl) {
+        // Same OBJ added earlier without its colours: attach them and rebuild the preview.
+        const updated = { ...match, mtl, hasThumb: false, thumbFailed: false };
+        await updateModel(updated);
+        result.updated.push(updated);
+      } else {
+        result.dupes++;
+      }
     } else {
-      seen.add(key);
-      // Folder names are useful hints: prefill them as a tag, so a user's own structure is not lost.
-      const folder = file._folder || (file.webkitRelativePath ? file.webkitRelativePath.split('/').slice(0, -1).pop() : '');
+      const folder = folderOf(file);
       const meta = {
         id: crypto.randomUUID(),
         name: file.name,
@@ -51,19 +60,47 @@ export async function importFiles(files, existing, onProgress) {
         size: file.size,
         lastModified: file.lastModified,
         title: '',
-        tags: folder ? [folder.toLowerCase()] : [],
+        tags: folder ? [folder] : [],
         note: '',
         fav: false,
         added: Date.now(),
         dims: null,
         hasThumb: false,
         thumbFailed: false,
+        ...(mtl ? { mtl } : {}),
       };
       await addModel(meta, file);
+      known.set(key, meta);
       result.added.push(meta);
     }
     done++;
     onProgress?.(done, models.length);
   }
   return result;
+}
+
+/** Look up the .mtl an OBJ points to (mtllib line) among the files added together. */
+async function findMtl(objFile, mtlFiles) {
+  if (!mtlFiles.size) return '';
+  const head = await objFile.slice(0, 65536).text();
+  const m = head.match(/^mtllib\s+(.+)$/m);
+  if (!m) return '';
+  const file = mtlFiles.get(m[1].trim().split(/[\\/]/).pop().toLowerCase());
+  return file ? file.text() : '';
+}
+
+// Folder names that say nothing about the model, so they are not turned into tags.
+const GENERIC_FOLDERS = new Set([
+  'downloads', 'download', 'files', 'file', 'documents', 'documenten', 'desktop', 'bureaublad',
+  'models', 'model', 'modellen', 'stl', 'stls', 'stl files', 'stl-files', 'obj', 'objs', '3mf', '3mfs',
+  '3d', '3d models', '3d printing', '3d print', '3dprint', '3d-print', 'prints', 'print', 'printing',
+  'new folder', 'nieuwe map', 'temp', 'tmp', 'untitled', 'misc', 'diversen', 'various', 'other', 'overig',
+  'onedrive', 'dropbox', 'google drive', 'mijn drive', 'my drive', 'pictures', 'afbeeldingen', 'data', 'src',
+]);
+
+/** Last folder name of a file's path, lower-case, or '' when missing or generic. */
+function folderOf(file) {
+  const path = file._folder || (file.webkitRelativePath ? file.webkitRelativePath.split('/').slice(0, -1).join('/') : '');
+  const name = path.split('/').pop().trim().toLowerCase();
+  return !name || GENERIC_FOLDERS.has(name) ? '' : name;
 }

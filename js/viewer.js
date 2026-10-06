@@ -73,7 +73,7 @@ export class Viewer {
     this.#clear();
     const blob = await getFile(meta.id);
     if (!blob) throw new Error('File missing');
-    const { object, dims } = await parseModel(blob, meta.ext);
+    const { object, dims } = await parseModel(blob, meta.ext, { mtl: meta.mtl });
     if (token !== this.token) { disposeObject(object); return null; }
 
     this.object = object;

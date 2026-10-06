@@ -191,12 +191,17 @@ async function handleFiles(files) {
     $('progress-text').textContent = t('import.progress', { done, total });
   });
   $('progress').hidden = true;
-  if (!res.added.length && !res.dupes && res.skipped) return toast(t('import.nofiles'));
+  if (!res.added.length && !res.updated.length && !res.dupes) return toast(t('import.nofiles'));
   state.models.push(...res.added);
+  for (const u of res.updated) {
+    state.models[state.models.findIndex((m) => m.id === u.id)] = u;
+    dropThumbUrl(u.id);
+  }
   render();
   toast(t('import.done', { added: res.added.length, dupes: res.dupes, skipped: res.skipped }));
   queueMissingThumbs();
   if (res.added.length) requestPersist();
+  if (res.updated.length) toast(t('import.colors', { n: res.updated.length }));
 }
 
 /* ---------- viewer ---------- */
