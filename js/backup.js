@@ -34,7 +34,7 @@ export async function exportBackup({ files }) {
     }
   }
   const zipped = zipSync(zipEntries, { level: 0 });
-  download(new Blob([zipped], { type: 'application/zip' }), `model-library-${files ? 'full' : 'catalog'}-${stamp()}.zip`);
+  download(new Blob([zipped], { type: 'application/zip' }), `model-index-${files ? 'full' : 'catalog'}-${stamp()}.zip`);
   try { localStorage.setItem('ml.lastBackup', String(Date.now())); } catch {}
 }
 

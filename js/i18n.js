@@ -16,6 +16,7 @@ export async function setLang(code) {
   const res = await fetch(`i18n/${lang}.json`);
   dict = await res.json();
   document.documentElement.lang = lang;
+  document.title = dict['app.doctitle'] ?? document.title;
   applyI18n();
 }
 

@@ -1,4 +1,4 @@
-# Model Library
+# Model Index
 
 Een gratis tool van [Werkplaats Marc](https://www.werkplaatsmarc.be) · A free tool by [Werkplaats Marc](https://www.werkplaatsmarc.be)
 

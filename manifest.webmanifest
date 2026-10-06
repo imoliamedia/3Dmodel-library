@@ -1,7 +1,7 @@
 {
-  "name": "Model Library",
-  "short_name": "Models",
-  "description": "Local 3D model library for STL, 3MF and OBJ files. Nothing leaves your device.",
+  "name": "Model Index",
+  "short_name": "Model Index",
+  "description": "Model Index by Werkplaats Marc: a free, local library for your STL, 3MF and OBJ files. Nothing leaves your device.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

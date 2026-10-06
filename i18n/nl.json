@@ -1,5 +1,5 @@
 {
-  "app.title": "Model Library",
+  "app.title": "Model Index",
   "search.placeholder": "Zoek op naam, tag of notitie…",
   "add.button": "Toevoegen",
   "add.title": "Modellen toevoegen",
@@ -149,5 +149,6 @@
   "del.libraryOnly": "Enkel uit de bibliotheek",
   "del.alsoDisk": "Ook van schijf verwijderen ({n})",
   "settings.import.hint": "Kies het .zip-bestand van je back-up. Zie je het niet, kies dan in de bestandskiezer een andere locatie (bv. Downloads of de map waar je het ontving).",
-  "import.nomtl": "{n} OBJ-model(len) verwijst naar een .mtl-bestand dat niet is meegegeven, dus de kleuren ontbreken. Voeg de .obj samen met het .mtl-bestand uit dezelfde map toe."
+  "import.nomtl": "{n} OBJ-model(len) verwijst naar een .mtl-bestand dat niet is meegegeven, dus de kleuren ontbreken. Voeg de .obj samen met het .mtl-bestand uit dezelfde map toe.",
+  "app.doctitle": "Model Index – 3D-bestanden ordenen | Werkplaats Marc"
 }
