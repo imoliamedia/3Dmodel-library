@@ -362,6 +362,7 @@ async function handleFiles(files) {
   queueMissingThumbs();
   if (res.added.length) requestPersist();
   if (res.updated.length) toast(t('import.colors', { n: res.updated.length }));
+  if (res.missingMtl) toast(t('import.nomtl', { n: res.missingMtl }), 9000);
 }
 
 /* ---------- viewer ---------- */

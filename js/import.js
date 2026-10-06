@@ -33,18 +33,24 @@ export async function importFiles(files, existing, onProgress) {
   const list = [...files].filter((f) => f && f.name);
   const models = list.filter((f) => isModelFile(f.name));
   // .mtl files carry the OBJ colours; they are not models themselves but get attached to their OBJ.
-  const mtlFiles = new Map(list.filter((f) => extOf(f.name) === 'mtl').map((f) => [f.name.toLowerCase(), f]));
+  // Tinkercad names every colour file "obj.mtl", so they are matched per folder, not just by name.
+  const mtlList = list.filter((f) => extOf(f.name) === 'mtl');
   const known = new Map(existing.map((m) => [`${m.name}|${m.size}|${m.lastModified}`, m]));
-  const result = { added: [], updated: [], dupes: 0, skipped: list.length - models.length - mtlFiles.size };
+  const result = { added: [], updated: [], dupes: 0, missingMtl: 0, skipped: list.length - models.length - mtlList.length };
 
   let done = 0;
   for (const file of models) {
     const key = `${file.name}|${file.size}|${file.lastModified}`;
-    const mtl = file.name.toLowerCase().endsWith('.obj') ? await findMtl(file, mtlFiles) : '';
+    let mtl = '';
+    if (file.name.toLowerCase().endsWith('.obj')) {
+      const found = await findMtl(file, mtlList);
+      mtl = found.text;
+      if (found.wanted && !mtl) result.missingMtl++;
+    }
     const match = known.get(key);
     if (match) {
-      if (mtl && !match.mtl) {
-        // Same OBJ added earlier without its colours: attach them and rebuild the preview.
+      if (mtl && mtl !== match.mtl) {
+        // Same OBJ added earlier without (or with other) colours: attach them and rebuild the preview.
         const updated = { ...match, mtl, hasThumb: false, thumbFailed: false };
         await updateModel(updated);
         result.updated.push(updated);
@@ -82,14 +88,28 @@ export async function importFiles(files, existing, onProgress) {
   return result;
 }
 
-/** Look up the .mtl an OBJ points to (mtllib line) among the files added together. */
-async function findMtl(objFile, mtlFiles) {
-  if (!mtlFiles.size) return '';
+/** Folder a file came from ('' when unknown), however it was added. */
+function dirOf(file) {
+  if (file._path) return file._path.slice(0, -1).join('/');
+  if (file._folder !== undefined) return file._folder;
+  return file.webkitRelativePath ? file.webkitRelativePath.split('/').slice(0, -1).join('/') : '';
+}
+
+/**
+ * Look up the .mtl an OBJ points to (mtllib line) among the files added together.
+ * The one in the same folder wins. A same-named file elsewhere is only used when it is the
+ * only candidate, so two folders that both hold an "obj.mtl" can never swap colours.
+ * Returns { wanted, text }: wanted is the referenced file name, text its contents ('' if not found).
+ */
+async function findMtl(objFile, mtlList) {
   const head = await objFile.slice(0, 65536).text();
   const m = head.match(/^mtllib\s+(.+)$/m);
-  if (!m) return '';
-  const file = mtlFiles.get(m[1].trim().split(/[\\/]/).pop().toLowerCase());
-  return file ? file.text() : '';
+  if (!m) return { wanted: '', text: '' };
+  const wanted = m[1].trim().split(/[\\/]/).pop().toLowerCase();
+  const sameName = mtlList.filter((f) => f.name.toLowerCase() === wanted);
+  const dir = dirOf(objFile).toLowerCase();
+  const file = sameName.find((f) => dirOf(f).toLowerCase() === dir) ?? (sameName.length === 1 ? sameName[0] : null);
+  return { wanted, text: file ? await file.text() : '' };
 }
 
 // Folder names that say nothing about the model, so they are not turned into tags.
