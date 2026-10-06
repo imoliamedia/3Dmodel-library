@@ -2,7 +2,7 @@ import { detectLang, setLang, getLang, t } from './i18n.js';
 import {
   getAllModels, getFile, getThumb, updateModel, deleteModel, storageInfo, requestPersist,
 } from './db.js';
-import { importFiles, filesFromDrop } from './import.js';
+import { importFiles, filesFromDrop, expandZips } from './import.js';
 import { ThumbQueue, THUMB_VERSION } from './thumbs.js';
 import { Viewer } from './viewer.js';
 import { exportBackup, importBackup, lastBackup } from './backup.js';
@@ -342,9 +342,12 @@ function render() {
 
 /* ---------- importing ---------- */
 
-async function handleFiles(files) {
-  if (!files.length) return;
+async function handleFiles(picked) {
+  if (!picked.length) return;
   $('add-dialog').close();
+  const { files, backups } = await expandZips(picked);
+  for (const backup of backups) await doImportBackup(backup);
+  if (!files.length) return backups.length ? undefined : toast(t('import.nofiles'));
   const res = await importFiles(files, state.models, (done, total) => {
     $('progress').hidden = false;
     $('progress-fill').style.width = `${(done / total) * 100}%`;
@@ -850,6 +853,8 @@ async function doImportBackup(file) {
     toast(t('backup.importdone', res));
   } catch (err) {
     console.error(err);
+    // not a backup: a zip with models in it is added like any other models
+    if (/\.zip$/i.test(file.name)) return handleFiles([file]);
     toast(t('backup.importfail'));
   }
 }
@@ -971,6 +976,8 @@ async function init() {
     }
   }, { rootMargin: '200px' });
 
+  // phones often hide files whose type they do not know when an accept list is set
+  if (matchMedia('(pointer: coarse)').matches) $('file-input').removeAttribute('accept');
   wire();
   await loadRoot();
   state.models = await getAllModels();

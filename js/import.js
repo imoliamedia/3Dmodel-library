@@ -1,3 +1,4 @@
+import { unzipSync } from 'three/addons/libs/fflate.module.js';
 import { isModelFile, extOf } from './loaders.js';
 import { addModel, updateModel } from './db.js';
 
@@ -23,6 +24,39 @@ export async function filesFromDrop(dataTransfer) {
   };
   for (const e of entries) await walk(e, '');
   return out.map((o) => Object.assign(o.file, { _folder: o.folder }));
+}
+
+/**
+ * Zip files that were picked directly (Tinkercad, Thingiverse and Printables hand out zips) are
+ * opened: the models and .mtl colour files inside are added, named after the zip.
+ * A zip that is one of our own backups is not unpacked but returned in `backups`.
+ */
+export async function expandZips(files) {
+  const out = [];
+  const backups = [];
+  for (const file of files) {
+    // zips found inside a folder that was added are left alone: that folder is usually already unpacked
+    if (extOf(file.name) !== 'zip' || file.webkitRelativePath || file._folder) { out.push(file); continue; }
+    let entries;
+    try {
+      entries = unzipSync(new Uint8Array(await file.arrayBuffer()), {
+        filter: (e) => !e.name.endsWith('/') && (isModelFile(e.name) || extOf(e.name) === 'mtl' || e.name === 'catalog.json'),
+      });
+    } catch {
+      continue; // not a readable zip
+    }
+    if (entries['catalog.json']) { backups.push(file); continue; }
+    const stem = file.name.replace(/\.zip$/i, '');
+    for (const [path, data] of Object.entries(entries)) {
+      const name = path.split('/').pop();
+      if (path.includes('__MACOSX/') || name.startsWith('._')) continue;
+      const dir = path.split('/').slice(0, -1).join('/');
+      out.push(Object.assign(new File([data], name, { lastModified: file.lastModified }), {
+        _folder: dir ? `${stem}/${dir}` : stem,
+      }));
+    }
+  }
+  return { files: out, backups };
 }
 
 /**

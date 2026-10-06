@@ -5,7 +5,7 @@
   "add.title": "Modellen toevoegen",
   "add.files": "Bestanden kiezen",
   "add.folder": "Een hele map kiezen",
-  "add.hint": "STL, 3MF en OBJ. Er wordt een kopie in de browser bewaard; je originelen blijven ongewijzigd. Voor OBJ-kleuren: kies het .mtl-bestand samen met de .obj.",
+  "add.hint": "STL, 3MF en OBJ, ook samen in een .zip (bv. van Tinkercad). Er wordt een kopie in de browser bewaard; je originelen blijven ongewijzigd. Voor OBJ-kleuren: kies het .mtl-bestand samen met de .obj.",
   "import.colors": "Kleuren toegevoegd aan {n} OBJ-model(len)",
   "common.close": "Sluiten",
   "filter.all": "Alles",

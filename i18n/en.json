@@ -5,7 +5,7 @@
   "add.title": "Add models",
   "add.files": "Choose files",
   "add.folder": "Choose a whole folder",
-  "add.hint": "STL, 3MF and OBJ. A copy is kept in the browser; your originals stay untouched. For OBJ colours, select the .mtl file together with the .obj.",
+  "add.hint": "STL, 3MF and OBJ, also together in a .zip (e.g. from Tinkercad). A copy is kept in the browser; your originals stay untouched. For OBJ colours, select the .mtl file together with the .obj.",
   "import.colors": "Colours added to {n} OBJ model(s)",
   "common.close": "Close",
   "filter.all": "All",
