@@ -57,6 +57,7 @@
   "settings.theme.auto": "Automatisch",
   "settings.theme.light": "Licht",
   "settings.theme.dark": "Donker",
+  "settings.rebuild": "Previews opnieuw maken",
   "settings.backup": "Back-up",
   "settings.backup.hint": "Je bibliotheek staat enkel in deze browser. Maak regelmatig een back-up, ook om van toestel te wisselen.",
   "settings.export.full": "Exporteer alles (catalogus + bestanden)",

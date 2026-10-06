@@ -3,7 +3,7 @@ import {
   getAllModels, getFile, getThumb, updateModel, deleteModel, storageInfo, requestPersist,
 } from './db.js';
 import { importFiles, filesFromDrop } from './import.js';
-import { ThumbQueue } from './thumbs.js';
+import { ThumbQueue, THUMB_VERSION } from './thumbs.js';
 import { Viewer } from './viewer.js';
 import { exportBackup, importBackup, lastBackup } from './backup.js';
 
@@ -81,7 +81,15 @@ const queue = new ThumbQueue({
 });
 
 function queueMissingThumbs() {
-  queue.add(state.models.filter((m) => !m.hasThumb && !m.thumbFailed));
+  // also redo previews made by an older version of the app (old thumbnails stay visible meanwhile)
+  queue.add(state.models.filter((m) => (!m.hasThumb && !m.thumbFailed) || m.thumbV !== THUMB_VERSION));
+}
+
+async function rebuildThumbs() {
+  state.models = state.models.map((m) => ({ ...m, thumbV: 0 }));
+  await Promise.all(state.models.map((m) => updateModel(m)));
+  $('settings-dialog').close();
+  queueMissingThumbs();
 }
 
 /* ---------- grid ---------- */
@@ -472,6 +480,7 @@ function wire() {
     localStorage.setItem('ml.theme', e.target.value);
     applyTheme(e.target.value);
   });
+  $('set-rebuild').addEventListener('click', rebuildThumbs);
   $('set-export-full').addEventListener('click', () => doExport(true));
   $('set-export-meta').addEventListener('click', () => doExport(false));
   $('set-import').addEventListener('click', () => $('import-input').click());

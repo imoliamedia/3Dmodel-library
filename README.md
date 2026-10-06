@@ -33,7 +33,7 @@ Voor GitHub Pages: zet de inhoud van deze map op een branch en activeer Pages. V
 
 - Mapkeuze werkt niet overal (iOS kiest enkel losse bestanden).
 - Bestanden boven 150 MB krijgen geen automatische preview.
-- OBJ-kleuren: kies het `.mtl`-bestand samen met de `.obj` (kleuren per materiaal en per hoekpunt worden getoond, texturen niet). Kleuren per filament in 3MF-projecten van Bambu/Orca worden in de viewer niet getoond (de thumbnail wel, als het bestand er een bevat).
+- OBJ-kleuren: kies het `.mtl`-bestand samen met de `.obj` (kleuren per materiaal en per hoekpunt worden getoond, texturen niet). 3MF-kleuren van Bambu Studio/OrcaSlicer (filamentkleur per object of onderdeel en met de verfkwast geschilderde vlakken) worden getoond; geschilderde randen zijn op driehoeksniveau benaderd. PrusaSlicer-kleuren per extruder worden nog niet getoond.
 - Een back-up met alle bestanden wordt in het geheugen opgebouwd: bij een zeer grote bibliotheek kan dat zwaar zijn.
 
 ## English

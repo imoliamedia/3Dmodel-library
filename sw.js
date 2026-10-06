@@ -1,5 +1,7 @@
-// Offline cache for the app shell. Bump VERSION when files change.
-const VERSION = 'v2';
+// Offline cache for the app shell.
+// Strategy: network first, cache as fallback. Updates therefore show up on the next load
+// when online, and the app still works offline. Bump VERSION to clear old caches.
+const VERSION = 'v3';
 const CACHE = `model-library-${VERSION}`;
 const ASSETS = [
   './',
@@ -29,7 +31,12 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  // cache: 'reload' skips the browser's HTTP cache so we never store stale copies
+  e.waitUntil(
+    caches.open(CACHE)
+      .then((c) => c.addAll(ASSETS.map((a) => new Request(a, { cache: 'reload' }))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', (e) => {
@@ -41,8 +48,17 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
-  if (e.request.method !== 'GET') return;
+  const { request } = e;
+  if (request.method !== 'GET' || new URL(request.url).origin !== location.origin) return;
   e.respondWith(
-    caches.match(e.request, { ignoreSearch: true }).then((hit) => hit || fetch(e.request))
+    fetch(request, { cache: 'no-cache' })
+      .then((res) => {
+        if (res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(request, copy));
+        }
+        return res;
+      })
+      .catch(() => caches.match(request, { ignoreSearch: true }))
   );
 });

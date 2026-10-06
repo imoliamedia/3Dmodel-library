@@ -3,6 +3,8 @@ import { parseModel, extract3mfThumbnail, addLights, fitCamera, disposeObject, M
 import { getFile, putThumb, updateModel } from './db.js';
 
 const SIZE = 360;
+/** Bump when previews should be regenerated for everyone (new colours, new renderer...). */
+export const THUMB_VERSION = 2;
 let renderer, scene, camera;
 
 function init() {
@@ -32,7 +34,7 @@ function renderToBlob(object) {
  */
 export async function generateThumb(meta) {
   const blob = await getFile(meta.id);
-  const next = { ...meta };
+  const next = { ...meta, thumbV: THUMB_VERSION };
   try {
     if (!blob) throw new Error('File missing');
     if (blob.size > MAX_PREVIEW_BYTES) throw new Error('Too large for automatic preview');

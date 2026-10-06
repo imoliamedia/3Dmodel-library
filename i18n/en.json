@@ -57,6 +57,7 @@
   "settings.theme.auto": "Automatic",
   "settings.theme.light": "Light",
   "settings.theme.dark": "Dark",
+  "settings.rebuild": "Rebuild previews",
   "settings.backup": "Backup",
   "settings.backup.hint": "Your library only lives in this browser. Make regular backups, also to move to another device.",
   "settings.export.full": "Export everything (catalog + files)",
